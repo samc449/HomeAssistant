@@ -1,0 +1,198 @@
+blueprint:
+  name: Light Control AL v1.1
+  description: "
+    
+    DIY Adaptive Lighting but with individual bulb support.
+
+    Requires Light Control Config v1.0.
+
+    ## New in version 1.1
+
+    Version 1.1 mimics the time-based automation, pulling everything together into a single, more compact blueprint.
+    
+    "
+  domain: automation
+  author: "Samuel Coles"
+  homeassistant:
+    min_version: 2024.5.3
+
+  # Inputs
+  input:
+    room_identifier:
+      name: Room Identifier
+      description: "I.e., kitchen. Used as part of scene/script names, i.e., scene.kitchen_concentrate_lights. Case sensitive."
+      selector:
+        text:
+
+    light_group:
+      name: Light Group
+      description: The light group to detect state changes. I.e., light.kitchen.
+      selector:
+        entity:
+          domain:
+            - light
+            - group
+
+    light_entities:
+      name: Light Entities
+      description: "The individual light entities that make up a group. I.e., light.kitchen_ceiling_1."
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    hue_button_4_entity_id:
+      name: Hue Button 4 Entity ID
+      description: "Hue button 4 on the Hue Dimmer Switch 2."
+      selector:
+        entity:
+          domain: event
+
+# Triggers
+trigger:
+  - id: light_group_turns_on
+    platform: state
+    entity_id: !input light_group
+    to: "on"
+    from: "off"
+
+  - id: hue_button_long_press
+    platform: state
+    entity_id: !input hue_button_4_entity_id
+    attribute: event_type
+    to: long_press
+
+  - id: hue_button_short_release
+    platform: state
+    entity_id: !input hue_button_4_entity_id
+    attribute: event_type
+    to: short_release
+
+  - id: light_control_config_updates
+    platform: state
+    entity_id: sensor.light_control_config
+
+# Variables
+variables:
+  # Inputs
+  light_group: !input light_group
+  light_entities: !input light_entities
+
+  # Helpers
+  scene_data: >
+    {{ (states('sensor.light_control_config') | from_json | default({})) }}
+  scene_data_primary: >
+    {{ scene_data['primary'] }}
+  scene_data_secondary: >
+    {{ scene_data['secondary'] }}
+  scene_data_active_time_block: >
+    {{ scene_data['time'] }}
+
+# Conditions
+condition: []
+
+# Actions
+action:
+  - choose:
+      # Light group turns on, attempt AL flow.
+      - conditions:
+          - condition: trigger
+            id: light_group_turns_on
+        sequence:
+          - if:
+              - condition: time
+                after: "07:00:00"
+                before: "23:00:00"
+            then:
+              - service: script.set_light_group_scene
+                data:
+                  scene_identifier: !input room_identifier
+                  transition: 1
+
+      # Restore AL when Hue button long_press is detected.
+      - conditions:
+          - condition: trigger
+            id: hue_button_long_press
+        sequence:
+          - service: script.set_light_group_scene
+            data:
+              scene_identifier: !input room_identifier
+              transition: 1
+
+      # Override AL and set an alternative scene when Hue button short_release is detected.
+      - conditions:
+          - condition: trigger
+            id: hue_button_short_release
+        sequence:
+          - service: script.set_light_group_alternative_scene
+            data:
+              scene_identifier: !input room_identifier
+              transition: 1
+
+      # Transition lights based on time of day (when light_control_config updates).
+      - conditions:
+          - condition: trigger
+            id: light_control_config_updates
+          - condition: template
+            value_template: >
+              {% set current_time = now().strftime('%H:%M') %}
+              {{ scene_data_active_time_block == current_time }}
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input light_group
+                state: "on"
+            then:
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{
+                        light_entities
+                        | select('in', (
+                            states.light
+                            | selectattr('state', 'eq', 'off')
+                            | map(attribute='entity_id')
+                            | list
+                        ))
+                        | list
+                        | length > 0
+                      }}
+                then:
+                  - variables:
+                      active_lights: >
+                        {{
+                          light_entities
+                          | select('in',
+                              states.light
+                              | selectattr('state', 'eq', 'on')
+                              | map(attribute='entity_id')
+                              | list
+                          )
+                          | list
+                        }}
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ active_lights | length > 0 }}"
+                        sequence:
+                          - repeat:
+                              count: "{{ active_lights | length }}"
+                              sequence:
+                                - service: light.turn_on
+                                  data:
+                                    transition: 60
+                                    brightness: "{{ scene_data_primary['brightness'] }}"
+                                    kelvin: "{{ scene_data_primary['kelvin'] }}"
+                                  target:
+                                    entity_id: "{{ active_lights[repeat.index - 1] }}"
+                                - delay:
+                                    hours: 0
+                                    minutes: 0
+                                    seconds: 2
+                                    milliseconds: 0
+                else:
+                  - service: script.set_light_group_scene
+                    data:
+                      scene_identifier: !input room_identifier
+                      transition: 60
+mode: single
