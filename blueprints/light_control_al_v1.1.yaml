@@ -4,7 +4,7 @@ blueprint:
     
     DIY Adaptive Lighting but with individual bulb support.
 
-    Requires [Light Control Config v1.0](https://github.com/samc449/HomeAssistant/blob/main/scripts/light_control_config_v1.0.yaml).
+    Requires [Light Control Config v1.0](https://github.com/samc449/HomeAssistant/blob/main/template_helpers/light_control_config_v1.0.yaml).
 
     ## New in version 1.1
 
