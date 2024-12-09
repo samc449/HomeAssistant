@@ -1,0 +1,16 @@
+set_light_group_alternative_scene:
+  alias: Set Light Group Alternative Scene
+  sequence:
+    - variables:
+        scene_identifier: "{{ scene_identifier }}"
+        smart_scene: "{{ (states('sensor.smart_scene_by_time') | from_json) }}"
+    - service: hue.activate_scene
+      metadata: {}
+      data:
+        transition: 1
+      target:
+        entity_id:
+          scene.{{ scene_identifier }}_{{ smart_scene.alternative.scene_name
+          }}
+  mode: parallel
+  max: 10
