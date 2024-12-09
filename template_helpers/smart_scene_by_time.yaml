@@ -1,0 +1,101 @@
+friendly_name: "Smart Scene By Time"
+value_template: >
+
+  {% set rest_k = 2217 %}
+  {% set rest_b = 90 %}
+
+  {% set concentrate_k = 4291 %}
+  {% set concentrate_b = 255 %}
+
+  {% set read_k = 2915 %}
+  {% set read_b = 255 %}
+
+  {% set relax_k = 2237 %}
+  {% set relax_b = 143 %}
+
+  {% set nightlight_k = 2217 %}
+  {% set nightlight_b = 25 %}
+
+
+  {% set time_now = now().strftime('%H:%M') %}
+
+
+  {% if time_now >= '07:00' and time_now < '09:00' %}
+    {
+      "current": {
+        "scene_name": "rest",
+        "kelvin": {{ rest_k }},
+        "brightness": {{ rest_b }}
+      },
+      "alternative": {
+        "scene_name": "concentrate",
+        "kelvin": {{ concentrate_k }},
+        "brightness": {{ concentrate_k }}
+      }
+    }
+  {% elif time_now >= '09:00' and time_now < '18:00' %}
+    {
+      "current": {
+        "scene_name": "concentrate",
+        "kelvin": {{ concentrate_k }},
+        "brightness": {{ concentrate_b }}
+      },
+      "alternative": {
+        "scene_name": "relax",
+        "kelvin": {{ relax_k }},
+        "brightness": {{ relax_k }}
+      }
+    }
+  {% elif time_now >= '18:00' and time_now < '20:00' %}
+    {
+      "current": {
+        "scene_name": "read",
+        "kelvin": {{ read_k }},
+        "brightness": {{ read_b }}
+      },
+      "alternative": {
+        "scene_name": "concentrate",
+        "kelvin": {{ concentrate_k }},
+        "brightness": {{ concentrate_k }}
+      }
+    }
+  {% elif time_now >= '20:00' and time_now < '21:00' %}
+    {
+      "current": {
+        "scene_name": "relax",
+        "kelvin": {{ relax_k }},
+        "brightness": {{ relax_k }}
+      },
+      "alternative": {
+        "scene_name": "read",
+        "kelvin": {{ read_k }},
+        "brightness": {{ read_k }}
+      }
+    }
+  {% elif time_now >= '21:00' and time_now < '23:00' %}
+    {
+      "current": {
+        "scene_name": "rest",
+        "kelvin": {{ rest_k }},
+        "brightness": {{ rest_b }}
+      },
+      "alternative": {
+        "scene_name": "relax",
+        "kelvin": {{ relax_k }},
+        "brightness": {{ relax_k }}
+      }
+    }
+  {% else %}
+    {
+      "current": {
+        "scene_name": "nightlight",
+        "kelvin": {{ nightlight_k }},
+        "brightness": {{ nightlight_b }}
+      },
+      "alternative": {
+        "scene_name": "rest",
+        "kelvin": {{ rest_k }},
+        "brightness": {{ rest_k }}
+      }
+    }
+  {% endif %}
