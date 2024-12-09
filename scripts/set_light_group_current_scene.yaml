@@ -1,0 +1,15 @@
+set_light_group_current_scene:
+  alias: Set Light Group Current Scene
+  sequence:
+    - variables:
+        scene_identifier: "{{ scene_identifier }}"
+        smart_scene: "{{ (states('sensor.smart_scene_by_time') | from_json) }}"
+        transition: "{{ transition | default(0) }}"
+    - service: hue.activate_scene
+      metadata: {}
+      data:
+        transition: "{{ transition }}"
+      target:
+        entity_id: scene.{{ scene_identifier }}_{{ smart_scene.current.scene_name }}
+  mode: parallel
+  max: 10
