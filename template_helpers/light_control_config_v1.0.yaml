@@ -1,0 +1,93 @@
+friendly_name: "Light Control Config v1.0"
+value_template: >
+
+  {# Set the kelvin and brightness for each scene #}
+
+  {% set rest = {
+    "scene": "rest",
+    "kelvin": 2217,
+    "brightness": 90
+  } %}
+
+  {% set concentrate = {
+    "scene": "concentrate",
+    "kelvin": 4291,
+    "brightness": 255
+  } %}
+
+  {% set read = {
+    "scene": "read",
+    "kelvin": 2915,
+    "brightness": 255
+  } %}
+
+  {% set relax = {
+    "scene": "relax",
+    "kelvin": 2237,
+    "brightness": 143
+  } %}
+
+  {% set nightlight = {
+    "scene": "nightlight",
+    "kelvin": 2217,
+    "brightness": 25
+  } %}
+
+
+  {# Associate scenes with different times of day #}
+
+  {% set scene_data = {
+    "07:00": {
+      "primary": rest,
+      "secondary": concentrate
+    },
+    "09:00": {
+      "primary": concentrate,
+      "secondary": relax
+    },
+    "18:00": {
+      "primary": read,
+      "secondary": concentrate
+    },
+    "20:00": {
+      "primary": relax,
+      "secondary": read
+    },
+    "21:00": {
+      "primary": rest,
+      "secondary": relax
+    },
+    "23:00": {
+      "primary": nightlight,
+      "secondary": rest
+    }
+  } %}
+
+
+  {# Default/fallback scenes when time block is not met #}
+
+  {% set default_scene = {
+    "primary": nightlight,
+    "secondary": rest
+  } %}
+
+
+  {# Match scene based on time now() #}
+
+  {% set current_time = now().strftime('%H:%M') %}
+  {% set last_time = namespace(value=None) %}
+  {% for time in scene_data.keys() | sort %}
+    {% if time <= current_time %}
+      {% set last_time.value = time %}
+    {% endif %}
+  {% endfor %}
+
+  {% set matched_time = last_time.value %}
+
+  {{
+    {
+      "primary": scene_data[matched_time].primary if matched_time else default_scene["primary"],
+      "secondary": scene_data[matched_time].secondary if matched_time else default_scene["secondary"],
+      "time": matched_time if matched_time else "00:00"
+    } | tojson
+  }}
