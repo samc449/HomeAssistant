@@ -1,10 +1,8 @@
 blueprint:
-  name: Light Control AL v1.1
+  name: Light Controls AL v1.1
   description: "
     
     DIY Adaptive Lighting but with individual bulb support.
-
-    Requires [Light Control Config v1.0](https://github.com/samc449/HomeAssistant/blob/main/template_helpers/light_control_config_v1.0.yaml).
 
     ## New in version 1.1
 
@@ -75,6 +73,7 @@ trigger:
 # Variables
 variables:
   # Inputs
+  room_identifier: !input room_identifier
   light_group: !input light_group
   light_entities: !input light_entities
 
@@ -104,30 +103,37 @@ action:
                 after: "07:00:00"
                 before: "23:00:00"
             then:
-              - service: script.set_light_group_scene
+              - service: hue.activate_scene
+                metadata: {}
                 data:
-                  scene_identifier: !input room_identifier
                   transition: 1
+                target:
+                  entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
 
       # Restore AL when Hue button long_press is detected.
       - conditions:
           - condition: trigger
             id: hue_button_long_press
         sequence:
-          - service: script.set_light_group_scene
+          - service: hue.activate_scene
+            metadata: {}
             data:
-              scene_identifier: !input room_identifier
               transition: 1
+            target:
+              entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
 
       # Override AL and set an alternative scene when Hue button short_release is detected.
       - conditions:
           - condition: trigger
             id: hue_button_short_release
         sequence:
-          - service: script.set_light_group_alternative_scene
+          - service: hue.activate_scene
+            metadata: {}
             data:
-              scene_identifier: !input room_identifier
               transition: 1
+            target:
+              entity_id:
+                scene.{{ room_identifier }}_{{ scene_data_secondary['scene'] }}
 
       # Transition lights based on time of day (when light_control_config updates).
       - conditions:
@@ -191,8 +197,10 @@ action:
                                     seconds: 2
                                     milliseconds: 0
                 else:
-                  - service: script.set_light_group_scene
+                  - service: hue.activate_scene
+                    metadata: {}
                     data:
-                      scene_identifier: !input room_identifier
                       transition: 60
+                    target:
+                      entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
 mode: single
