@@ -1,0 +1,36 @@
+{% set lights = expand(
+  'light.kitchen_ceiling_1',
+  'light.kitchen_ceiling_2',
+  'light.kitchen_ceiling_3',
+  'light.kitchen_ceiling_4',
+  'light.kitchen_ceiling_5',
+  'light.kitchen_ceiling_6',
+  'light.kitchen_ceiling_7',
+  'light.kitchen_ceiling_8'
+) | list %}
+
+{% set scene_data = states('sensor.light_control_config') | from_json | default({}) %}
+{% set scene_data_primary = scene_data.get('primary', {}) %}
+{% set expected_brightness = scene_data_primary.get('brightness') %}
+{% set expected_kelvin = scene_data_primary.get('kelvin') %}
+
+{% set scene_data_default_on = scene_data.get('default_on', {}) %}
+{% set default_on_brightness = scene_data_default_on.get('brightness') %}
+{% set default_on_kelvin = scene_data_default_on.get('kelvin') %}
+
+{% set on_lights = lights | selectattr('state', 'equalto', 'on') | list %}
+
+{% set exclude_default_lights = on_lights
+  | selectattr('attributes.color_temp_kelvin', 'ne', default_on_kelvin) | list or 
+  on_lights | selectattr('attributes.brightness', 'ne', default_on_brightness) | list %}
+
+{%- if exclude_default_lights | length == 0 %}
+  {{ 'auto' }}
+{%- else %}
+  {% set variations = exclude_default_lights 
+    | selectattr('attributes.brightness', 'ne', expected_brightness) | list or
+    exclude_default_lights
+    | selectattr('attributes.color_temp_kelvin', 'ne', expected_kelvin)
+    | list %}
+  {{ 'manual' if variations | length > 0 else 'auto' }}
+{%- endif %}
