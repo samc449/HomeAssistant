@@ -1,0 +1,403 @@
+blueprint:
+  name: Light Controls AL v1.2
+  description: "
+    DIY Adaptive Lighting but with individual bulb support.
+
+    ## New in version 1.2
+
+    - Time-based transitions
+    - Double click support
+    - Light override helper
+    - 'Is' transitioning helper
+    - Manual adjustment helper
+    "
+  domain: automation
+  author: "Samuel Coles"
+  homeassistant:
+    min_version: 2024.5.3
+
+  # Inputs
+  input:
+    room_identifier:
+      name: Room Identifier
+      description: "I.e., kitchen. Used as part of scene/script names, i.e., scene.kitchen_concentrate_lights. Case sensitive."
+      selector:
+        text:
+
+    light_group:
+      name: Light Group
+      description: The light group to detect state changes. I.e., light.kitchen.
+      selector:
+        entity:
+          domain:
+            - light
+            - group
+
+    light_entities:
+      name: Light Entities
+      description: "The individual light entities that make up a group. I.e., light.kitchen_ceiling_1."
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    hue_button_2_entity_id:
+      name: Hue Button 2 Entity ID
+      description: "Hue button 2 on the Hue Dimmer Switch 2."
+      selector:
+        entity:
+          domain: event
+
+    hue_button_3_entity_id:
+      name: Hue Button 3 Entity ID
+      description: "Hue button 3 on the Hue Dimmer Switch 2."
+      selector:
+        entity:
+          domain: event
+
+    hue_button_4_entity_id:
+      name: Hue Button 4 Entity ID
+      description: "Hue button 4 on the Hue Dimmer Switch 2."
+      selector:
+        entity:
+          domain: event
+
+    time_based_transition:
+      name: Transition Time
+      description: "The time (in seconds) it takes to transition from one scene to another when triggered by time."
+      selector:
+        number:
+          max: 1800
+          min: 0
+      default: 60
+
+    hue_double_press_action:
+      name: "Double-Press Action (Hue)"
+      description: "Action that triggers when the hue button is double-pressed. Can be a scene or script."
+      selector:
+        entity:
+          domain:
+            - scene
+            - script
+      default: none
+
+    light_override_switch:
+      name: "AL Override Switch"
+      description: "Stops all adaptive lighting."
+      selector:
+        entity:
+          domain: input_boolean
+
+    transition_helper:
+      name: "Transitioning Helper"
+      description: "Helper to track transitioning state."
+      selector:
+        entity:
+          domain: input_boolean
+
+    manual_adjustment_detector:
+      name: "Manual Adjustment Detector"
+      description: "Provide a template sensor which outputs either 'manual' or 'auto'."
+      selector:
+        entity:
+          domain: sensor
+
+# Triggers
+trigger:
+  - id: light_group_turns_on
+    platform: state
+    entity_id: !input light_group
+    to: "on"
+    from: "off"
+
+  - id: light_group_turns_off
+    platform: state
+    entity_id: !input light_group
+    to: "off"
+    from: "on"
+
+  - id: brightness_up_button_short_release
+    platform: state
+    entity_id: !input hue_button_2_entity_id
+    attribute: event_type
+    to: short_release
+
+  - id: brightness_down_button_short_release
+    platform: state
+    entity_id: !input hue_button_3_entity_id
+    attribute: event_type
+    to: short_release
+
+  - id: hue_button_long_press
+    platform: state
+    entity_id: !input hue_button_4_entity_id
+    attribute: event_type
+    to: long_press
+
+  - id: hue_button_short_release
+    platform: state
+    entity_id: !input hue_button_4_entity_id
+    attribute: event_type
+    to: short_release
+
+  - id: light_control_config_updates
+    platform: state
+    entity_id: sensor.light_control_config
+
+  - id: manual_mode_detected
+    platform: state
+    entity_id: !input manual_adjustment_detector
+    to: manual
+    for:
+      seconds: 15
+
+  - id: auto_mode_detected
+    platform: state
+    entity_id: !input manual_adjustment_detector
+    to: auto
+    for:
+      seconds: 15
+
+# Variables
+variables:
+  # Inputs
+  room_identifier: !input room_identifier
+  light_group: !input light_group
+  light_entities: !input light_entities
+  time_based_transition: !input time_based_transition
+  hue_double_press_action: !input hue_double_press_action
+  light_override_switch: !input light_override_switch
+  transition_helper: !input transition_helper
+
+  # Helpers
+  light_override_is_active: >
+    {{ is_state(light_override_switch, 'on') }}
+  scene_data: >
+    {{ (states('sensor.light_control_config') | from_json | default({})) }}
+  scene_data_primary: >
+    {{ scene_data['primary'] }}
+  scene_data_secondary: >
+    {{ scene_data['secondary'] }}
+  scene_data_active_time_block: >
+    {{ scene_data['time'] }}
+  hue_double_press_prefix: >
+    {{ hue_double_press_action.split('.')[0] }}
+  is_transitioning: >
+    {{ is_state(transition_helper, 'on') }}
+
+# Conditions
+condition: []
+
+# Actions
+action:
+  - choose:
+      # Lights turn on from off state, set kelvin and brightness.
+      - conditions:
+          - condition: trigger
+            id: light_group_turns_on
+          - condition: template
+            value_template: "{{ not light_override_is_active }}"
+        sequence:
+          - service: hue.activate_scene
+            metadata: {}
+            data:
+              transition: 1
+            target:
+              entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
+
+      # Lights turn off:
+      # - Reset light override switch
+      # - Turn off transitioning helper
+      - conditions:
+          - condition: trigger
+            id: light_group_turns_off
+          - condition: template
+            value_template: "{{ light_override_is_active }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ light_override_is_active }}"
+            then:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ light_override_switch }}"
+          - if:
+              - condition: template
+                value_template: "{{ is_transitioning }}"
+            then:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ transition_helper }}"
+
+      # Brightness up/down turns on light override switch.
+      - conditions:
+          - condition: trigger
+            id:
+              - brightness_up_button_short_release
+              - brightness_down_button_short_release
+          - condition: template
+            value_template: "{{ not light_override_is_active }}"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ light_override_switch }}"
+
+      # Long hue press detected:
+      # - Set lights to default state
+      # - Turn off light override switch
+      - conditions:
+          - condition: trigger
+            id: hue_button_long_press
+        sequence:
+          - service: hue.activate_scene
+            metadata: {}
+            data:
+              transition: 1
+            target:
+              entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
+          - if:
+              - condition: template
+                value_template: "{{ light_override_is_active }}"
+            then:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ light_override_switch }}"
+
+      # Single or double-press (hue) detected:
+      # - Set an alternative scene or script
+      # - Turn on light override switch
+      - conditions:
+          - condition: trigger
+            id: hue_button_short_release
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ not light_override_is_active }}"
+            then:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: "{{ light_override_switch }}"
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input hue_button_4_entity_id
+                attribute: event_type
+                to: short_release
+            timeout: "0.5"
+          - choose:
+              # Double-press action
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ wait.trigger is not none and hue_double_press_action != 'none' }}
+                sequence:
+                  - service: "{{ hue_double_press_prefix }}.turn_on"
+                    target:
+                      entity_id: "{{ hue_double_press_action }}"
+              # Single-press action
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wait.trigger is none }}"
+                sequence:
+                  - service: hue.activate_scene
+                    metadata: {}
+                    data:
+                      transition: 1
+                    target:
+                      entity_id:
+                        - scene.{{ room_identifier }}_{{ scene_data_secondary['scene'] }}
+
+      # Transition lights based on time of day (when light_control_config updates).
+      - conditions:
+          - condition: trigger
+            id: light_control_config_updates
+          - condition: template
+            value_template: >
+              {% set current_time = now().strftime('%H:%M') %}
+              {{ scene_data_active_time_block == current_time }}
+          - condition: template
+            value_template: "{{ not light_override_is_active }}"
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input light_group
+                state: "on"
+            then:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: "{{ transition_helper }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{
+                        light_entities
+                        | select('in', (
+                            states.light
+                            | selectattr('state', 'eq', 'off')
+                            | map(attribute='entity_id')
+                            | list
+                        ))
+                        | list
+                        | length > 0
+                      }}
+                then:
+                  - variables:
+                      active_lights: >
+                        {{
+                          light_entities
+                          | select('in',
+                              states.light
+                              | selectattr('state', 'eq', 'on')
+                              | map(attribute='entity_id')
+                              | list
+                          )
+                          | list
+                        }}
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ active_lights | length > 0 }}"
+                        sequence:
+                          - service: light.turn_on
+                            data:
+                              transition: "{{ time_based_transition }}"
+                              brightness: "{{ scene_data_primary['brightness'] }}"
+                              kelvin: "{{ scene_data_primary['kelvin'] }}"
+                            target:
+                              entity_id: "{{ active_lights }}"
+                else:
+                  - service: hue.activate_scene
+                    metadata: {}
+                    data:
+                      transition: "{{ time_based_transition }}"
+                    target:
+                      entity_id: scene.{{ room_identifier }}_{{ scene_data_primary['scene'] }}
+              - delay: "{{ time_based_transition }}"
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ transition_helper }}"
+
+      # Set override switch when manual mode detected.
+      - conditions:
+          - condition: trigger
+            id: manual_mode_detected
+          - condition: template
+            value_template: "{{ not light_override_is_active }}"
+          - condition: template
+            value_template: "{{ not is_transitioning }}"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ light_override_switch }}"
+
+      # Turn off override switch when auto mode detected.
+      - conditions:
+          - condition: trigger
+            id: auto_mode_detected
+          - condition: template
+            value_template: "{{ light_override_is_active }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ light_override_switch }}"
+
+mode: single
