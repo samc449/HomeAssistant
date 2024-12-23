@@ -11,7 +11,7 @@ value_template: >
 
   {% set concentrate = {
     "scene": "concentrate",
-    "kelvin": 4291,
+    "kelvin": 4347,
     "brightness": 255
   } %}
 
@@ -23,7 +23,7 @@ value_template: >
 
   {% set relax = {
     "scene": "relax",
-    "kelvin": 2237,
+    "kelvin": 2257,
     "brightness": 143
   } %}
 
@@ -88,6 +88,7 @@ value_template: >
     {
       "primary": scene_data[matched_time].primary if matched_time else default_scene["primary"],
       "secondary": scene_data[matched_time].secondary if matched_time else default_scene["secondary"],
+      "default_on": nightlight,
       "time": matched_time if matched_time else "00:00"
     } | tojson
   }}
