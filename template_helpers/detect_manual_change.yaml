@@ -21,7 +21,7 @@
 {% set on_lights = lights | selectattr('state', 'equalto', 'on') | list %}
 
 {% set exclude_default_lights = on_lights
-  | selectattr('attributes.color_temp_kelvin', 'ne', default_on_kelvin) | list or 
+  | selectattr('attributes.color_temp_kelvin', 'ne', default_on_kelvin) | list and 
   on_lights | selectattr('attributes.brightness', 'ne', default_on_brightness) | list %}
 
 {%- if exclude_default_lights | length == 0 %}
